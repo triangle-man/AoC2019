@@ -9,19 +9,32 @@
   (define intcode
     (list->vector (map string->number inputs)))
 
-  (define program
-    (machine intcode 0))
-
   ;; PART I
   
-  ;; Fix machine
+  (define program
+    (machine-init intcode 0))
+
   (mem-write! program 1 12)
   (mem-write! program 2 2)
 
-  ;; Run 
   (machine-run! program)
-  (printf "Value at position 0 is ~a\n" (mem-read program 0)))
+  (printf "Value at position 0 is ~a\n" (mem-read program 0))
 
+  ;; PART II
+
+  (define *required-output* 19690720)
+  
+  (for* ([noun (in-range 100)]
+         [verb (in-range 100)])
+    ;; (when (= verb 0) (printf "~a " noun))
+    (let ([program (machine-init intcode 0)])
+      (mem-write! program 1 noun)
+      (mem-write! program 2 verb)
+      (machine-run! program)
+      (when (= (mem-read program 0) *required-output*)
+        (printf "\nSuccess! noun = ~a, verb = ~a\n" noun verb)))))
+
+    
 (module+ test
   (define eg1
     (machine
@@ -40,6 +53,11 @@
 ;; Machines are mutable
 ;; The instruction pointer is #f if the machine has halted
 (struct machine (memory ip) #:transparent #:mutable)
+
+;; machine-init
+;; Copies initial memory vector
+(define (machine-init v ic)
+  (machine (vector-copy v) ic))
 
 ;; halted? : machine? -> boolean?
 (define (halted? m)
@@ -87,9 +105,8 @@
       [(= opcode 99) (halt! m)]
       [(= opcode 1)  (execute-and-step-four! + m ip)]
       [(= opcode 2)  (execute-and-step-four! * m ip)]
-      [else
-       (raise-user-error "Unknown opcode ~a at pc = ~a" opcode ip)]))
-  )
+      [else          (halt! m)] ;; Unknown opcode
+      )))
 
 ;; despatch-four! : procedure? machine? -> void?
 (define (execute-and-step-four! op m ip)
