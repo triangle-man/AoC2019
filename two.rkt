@@ -22,9 +22,6 @@
   (machine-run! program)
   (printf "Value at position 0 is ~a\n" (mem-read program 0)))
 
-
-
-
 (module+ test
   (define eg1
     (machine
@@ -39,19 +36,19 @@
 ;; ------------------------------------------------------------
 ;; Machines
 
-;; A machine is a vector of integers and a program counter
+;; A machine is a vector of integers and an instruction pointer
 ;; Machines are mutable
-;; The programme counter is #f if the machine has halted
-(struct machine (memory pc) #:transparent #:mutable)
+;; The instruction pointer is #f if the machine has halted
+(struct machine (memory ip) #:transparent #:mutable)
 
 ;; halted? : machine? -> boolean?
 (define (halted? m)
-  (not (machine-pc m)))
+  (not (machine-ip m)))
 
 ;; halt! : machine? -> machine?
 ;; Stop the machine
 (define (halt! m)
-  (set-machine-pc! m #f))
+  (set-machine-ip! m #f))
 
 ;; read-mem : machine? integer? -> integer?
 ;; Read the memory at position addr
@@ -84,20 +81,20 @@
 ;; Execute one instruction in a machine
 ;; pc must not be #f on entry
 (define (machine-step! m)
-  (let* ([pc     (machine-pc m)]
-         [opcode (mem-read m pc)])
+  (let* ([ip     (machine-ip m)]
+         [opcode (mem-read m ip)])
     (cond
       [(= opcode 99) (halt! m)]
-      [(= opcode 1)  (execute-and-step-four! + m pc)]
-      [(= opcode 2)  (execute-and-step-four! * m pc)]
+      [(= opcode 1)  (execute-and-step-four! + m ip)]
+      [(= opcode 2)  (execute-and-step-four! * m ip)]
       [else
-       (raise-user-error "Unknown opcode ~a at pc = ~a" opcode pc)]))
+       (raise-user-error "Unknown opcode ~a at pc = ~a" opcode ip)]))
   )
 
 ;; despatch-four! : procedure? machine? -> void?
-(define (execute-and-step-four! op m pc)
-  (let ([x (mem-read-indirect m (+ pc 1))]
-        [y (mem-read-indirect m (+ pc 2))])
+(define (execute-and-step-four! op m ip)
+  (let ([x (mem-read-indirect m (+ ip 1))]
+        [y (mem-read-indirect m (+ ip 2))])
     (let ([result (op x y)])
-      (mem-write-indirect! m (+ pc 3) result)))
-  (set-machine-pc! m (+ pc 4)))
+      (mem-write-indirect! m (+ ip 3) result)))
+  (set-machine-ip! m (+ ip 4)))
