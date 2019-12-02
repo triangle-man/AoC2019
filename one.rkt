@@ -3,7 +3,7 @@
 ;; ------------------------------------------------------------
 ;; inputs : Listof string?
 (define inputs
-  (with-input-from-file "inputs/one.csv" port->lines))
+  (with-input-from-file "inputs/one.txt" port->lines))
 
 (define masses (map string->number inputs))
 
