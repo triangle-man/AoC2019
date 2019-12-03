@@ -1,5 +1,11 @@
 #lang racket
 
+;; Data types:
+;; posn         : an (x, y) pair
+;; segment      : a posn--posn pair
+;; line         : a list of positions
+;; displacement : a posn and a compass direction 
+
 (module+ main
 
   ;; Read and parse input wires
@@ -27,13 +33,11 @@
 ;; A posn is two integer coordinates:
 (struct posn (x y) #:transparent)
 
-;; Two positions are ordered if either their x-values are the same and the
-;; y-values are ordered; or their y-values are the same and their x-values are ordered
+;; Two positions are ordered if the first is not above or to the right of the
+;; other
 (define (posn<=? p1 p2)
-  (cond
-    [(= (posn-x p1) (posn-x p2)) (<= (posn-y p1) (posn-y p2))]
-    [(= (posn-y p1) (posn-y p2)) (<= (posn-x p1) (posn-x p2))]
-    [else #f]))
+  (and (<= (posn-y p1) (posn-y p2))
+       (<= (posn-x p1) (posn-x p2))))
 
 (define (manhatten-norm p)
   (+ (abs (posn-x p)) (abs (posn-y p))))
@@ -48,7 +52,7 @@
 (define (horizontal? seg)
   (= (posn-y (segment-p1 seg)) (posn-y (segment-p2 seg))))
 
-;; A segmented is ordered if its two points are ordered
+;; A segment is ordered if its two points are ordered
 (define (ordered? seg)
   (posn<=? (segment-p1 seg) (segment-p2 seg)))
 
@@ -97,7 +101,7 @@
 ;; horizontally away from the last
 (struct line (positions))
 
-;; Convert a line to a list of ordered segments (in no particular order)
+;; Convert a line to a list of segments (in no particular order)
 (define (line->segments ll)
   (define (segmentify p rest-of-line)
     (if (null? rest-of-line)
