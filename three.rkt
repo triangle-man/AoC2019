@@ -9,20 +9,32 @@
 (module+ main
 
   ;; Read and parse input wires
+  (define (parse-input-line str)
+    (map parse-displacement (string-split str ",")))
+  
   (define-values (in1 in2)
     (with-input-from-file "inputs/three.txt"
-      (λ () (values (string-split (read-line) ",")
-                    (string-split (read-line) ",")))))
+      (λ () (values (parse-input-line (read-line))
+                    (parse-input-line (read-line))))))
 
   (define wire1
-    (line->segments (wire-up (posn 0 0) (map parse-displacement in1))))
+    (line->segments (wire-up (posn 0 0) in1)))
   (define wire2
-    (line->segments (wire-up (posn 0 0) (map parse-displacement in2))))
-  
+    (line->segments (wire-up (posn 0 0) in2)))
+
+  ;; The intersection points, excluding the origin
+  (define is (cdr (intersect-segments wire1 wire2)))
+
+  ;; Part I
   (println
-   (apply min
-          (map manhatten-norm
-               (cdr (intersect-segments wire1 wire2)))))
+   (apply min (map posn-manhatten-norm is)))
+
+  ;; Part II
+  (define counts1 (map (λ (p) (line-count-steps wire1 p)) is))
+  (define counts2 (map (λ (p) (line-count-steps wire2 p)) is))
+
+  (println
+   (apply min (map + counts1 counts2)))
 
   )
 
@@ -39,7 +51,7 @@
   (and (<= (posn-y p1) (posn-y p2))
        (<= (posn-x p1) (posn-x p2))))
 
-(define (manhatten-norm p)
+(define (posn-manhatten-norm p)
   (+ (abs (posn-x p)) (abs (posn-y p))))
 
 
@@ -51,6 +63,12 @@
 
 (define (horizontal? seg)
   (= (posn-y (segment-p1 seg)) (posn-y (segment-p2 seg))))
+
+(define (segment-length seg)
+  (let ([p1 (segment-p1 seg)]
+        [p2 (segment-p2 seg)])
+    (+ (abs (- (posn-x p2) (posn-x p1)))
+       (abs (- (posn-y p2) (posn-y p1))))))
 
 ;; A segment is ordered if its two points are ordered
 (define (ordered? seg)
@@ -94,6 +112,43 @@
            (for*/list ([s1 ordered-ss1]
                        [s2 ordered-ss2])
              (intersect s1 s2)))))
+
+;; Given a segment (not necessarily ordered) and a position, decide whether the
+;; point lies on the segment. If it does, return the number of points between
+;; the start of the segment and this position (inclusive); otherwise return #f
+(define (segment-locate-posn seg pos)
+  (if (horizontal? seg)
+      (and (= (posn-y pos) (posn-y (segment-p1 seg)))
+           (locate-within (posn-x (segment-p1 seg))
+                          (posn-x (segment-p2 seg))
+                          (posn-x pos)))
+      (and (= (posn-x pos) (posn-x (segment-p1 seg)))
+           (locate-within (posn-y (segment-p1 seg))
+                          (posn-y (segment-p2 seg))
+                          (posn-y pos)))))
+
+;; Does x lie within x1 and x2, and if so, how far from x1?
+(define (locate-within x1 x2 x)
+  (or
+   (and (<= x1 x) (<= x x2) (- x x1))
+   (and (<= x2 x) (<= x x1) (- x1 x))))
+
+;; Count how many steps from the beginning we find the position
+(define (line-count-steps ss pos)
+  (define (count-steps segments-remaining steps-so-far)
+    (if (null? segments-remaining)
+        steps-so-far
+        (let* ([next-segment (car segments-remaining)]
+               [N-steps (segment-locate-posn next-segment pos)])
+          (if N-steps ;; found intersection
+              (+ steps-so-far N-steps)
+              (count-steps (cdr segments-remaining)
+                           (+ steps-so-far (segment-length next-segment)))))))
+  (count-steps ss 0))
+
+
+
+
 
 ;; Lines
 ;; -----
@@ -163,8 +218,7 @@
   (check-true (posn<=? (posn 0 0) (posn 1 0)))
   (check-true (posn<=? (posn 0 0) (posn 0 1)))
   (check-false (posn<=? (posn 1 0) (posn 0 0)))
-  (check-false (posn<=? (posn 0 1) (posn 0 0)))
-  (check-false (posn<=? (posn 0 0) (posn 1 1))))
+  (check-false (posn<=? (posn 0 1) (posn 0 0))))
 
 (module+ test
   (check-true (horizontal? (segment (posn 0 0) (posn 1 0))))
@@ -176,30 +230,30 @@
                 (posn 2 5)))
 
 (module+ test
-  (define eg1a
+  
+  (define (make-eg str)
     (line->segments
      (wire-up (posn 0 0)
               (map parse-displacement
-                   (string-split "R75,D30,R83,U83,L12,D49,R71,U7,L72" ",")))))
-  (define eg1b
-    (line->segments
-     (wire-up (posn 0 0)
-              (map parse-displacement
-                   (string-split "U62,R66,U55,R34,D71,R55,D58,R83" ",")))))
+                   (string-split str ",")))))
 
-  (check-equal? (apply min (map manhatten-norm (cdr (intersect-segments eg1a eg1b))))
-                159)
+  (define eg0a (make-eg "R8,U5,L5,D3"))
+  (define eg0b (make-eg "U7,R6,D4,L4"))
+  
+  (define eg1a
+    (make-eg "R75,D30,R83,U83,L12,D49,R71,U7,L72"))
+
+  (define eg1b
+    (make-eg "U62,R66,U55,R34,D71,R55,D58,R83"))
+
+  (check-equal?
+   (apply min (map posn-manhatten-norm (cdr (intersect-segments eg1a eg1b))))
+   159)
 
   (define eg2a
-    (line->segments
-     (wire-up (posn 0 0)
-              (map parse-displacement
-                   (string-split "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51" ",")))))
+    (make-eg "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51"))
+
   (define eg2b
-    (line->segments
-     (wire-up (posn 0 0)
-              (map parse-displacement
-                   (string-split "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7" ",")))))
+    (make-eg "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7")))
 
   
- )
