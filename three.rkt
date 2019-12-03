@@ -66,7 +66,6 @@
 ;; - a posn, or
 ;; - #f if they do not intersect, or
 ;; - #f if they are both horizontal or both vertical
-
 (define (intersect s1 s2)
   (cond
     [(and (horizontal? s1) (not (horizontal? s2))) (intersect-normal s1 s2)]
@@ -89,10 +88,12 @@
 ;; Given two lists of segments, find the intersections of horizontal segments
 ;; from one with vertical segments from the other
 (define (intersect-segments ss1 ss2)
-  (filter values
-          (for*/list ([s1 ss1]
-                      [s2 ss2])
-            (intersect s1 s2))))
+  (let ([ordered-ss1 (map make-ordered ss1)]
+        [ordered-ss2 (map make-ordered ss2)])
+   (filter values
+           (for*/list ([s1 ordered-ss1]
+                       [s2 ordered-ss2])
+             (intersect s1 s2)))))
 
 ;; Lines
 ;; -----
@@ -106,7 +107,7 @@
   (define (segmentify p rest-of-line)
     (if (null? rest-of-line)
         null
-        (cons (make-ordered (segment p (car rest-of-line)))
+        (cons (segment p (car rest-of-line))
               (segmentify (car rest-of-line) (cdr rest-of-line)))))
   (segmentify (car ll) (cdr ll)))
 
