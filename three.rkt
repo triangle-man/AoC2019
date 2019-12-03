@@ -8,8 +8,18 @@
       (λ () (values (string-split (read-line) ",")
                     (string-split (read-line) ",")))))
 
+  (define wire1
+    (line->segments (wire-up (posn 0 0) (map parse-displacement in1))))
+  (define wire2
+    (line->segments (wire-up (posn 0 0) (map parse-displacement in2))))
   
-  #f)
+  (println
+   (apply min
+          (map manhatten-norm
+               (cdr (intersect-segments wire1 wire2)))))
+
+  )
+
 
 ;; Positions
 ;; ---------
@@ -24,6 +34,10 @@
     [(= (posn-x p1) (posn-x p2)) (<= (posn-y p1) (posn-y p2))]
     [(= (posn-y p1) (posn-y p2)) (<= (posn-x p1) (posn-x p2))]
     [else #f]))
+
+(define (manhatten-norm p)
+  (+ (abs (posn-x p)) (abs (posn-y p))))
+
 
 ;; Segments
 ;; --------
@@ -68,6 +82,14 @@
         (posn x y)
         #f)))
 
+;; Given two lists of segments, find the intersections of horizontal segments
+;; from one with vertical segments from the other
+(define (intersect-segments ss1 ss2)
+  (filter values
+          (for*/list ([s1 ss1]
+                      [s2 ss2])
+            (intersect s1 s2))))
+
 ;; Lines
 ;; -----
 
@@ -79,7 +101,7 @@
 (define (line->segments ll)
   (define (segmentify p rest-of-line)
     (if (null? rest-of-line)
-        null?
+        null
         (cons (make-ordered (segment p (car rest-of-line)))
               (segmentify (car rest-of-line) (cdr rest-of-line)))))
   (segmentify (car ll) (cdr ll)))
@@ -88,8 +110,8 @@
 ;; Displacements
 ;; -------------
 
-;; A wire is a list of displacements, where a displacement is a direction and a
-;; distance. A direction is one of 'up, 'down, 'left, or 'right
+;; A displacement is a direction and a distance. A direction is one of 'up,
+;; 'down, 'left, or 'right
 (struct displacement (dir dist) #:transparent)
 
 ;; parse-displacement : string? -> displacement?
@@ -106,11 +128,25 @@
             (displacement dir (string->number dist))))
         (raise-user-error "Can't match displacement " str))))
 
+(define (displace p delta)
+  (let ([dist (displacement-dist delta)])
+   (match (displacement-dir delta)
+     ['up    (struct-copy posn p (y (+ (posn-y p) dist)))]
+     ['down  (struct-copy posn p (y (- (posn-y p) dist)))]
+     ['left  (struct-copy posn p (x (- (posn-x p) dist)))]
+     ['right (struct-copy posn p (x (+ (posn-x p) dist)))])))
+
 ;; wire-up : posn [list-of displacement] -> line
 ;; Convert a (non-empty) list of displacements into a line.
-(define (wire-up start disps)
-  (foldl ))
-
+(define (wire-up origin deltas)
+  (define (wire-up-helper line-so-far deltas-remaining)
+    (if (null? deltas-remaining)
+          line-so-far
+          (wire-up-helper
+           (cons (displace (car line-so-far) (car deltas-remaining))
+                 line-so-far)
+           (cdr deltas-remaining))))
+  (reverse (wire-up-helper (list origin) deltas)))
 
 ;; ------------------------------------------------------------
 ;; Tests
@@ -133,3 +169,32 @@
   (check-equal? (intersect (segment (posn 0 5) (posn 5 5))
                            (segment (posn 2 0) (posn 2 10)))
                 (posn 2 5)))
+
+(module+ test
+  (define eg1a
+    (line->segments
+     (wire-up (posn 0 0)
+              (map parse-displacement
+                   (string-split "R75,D30,R83,U83,L12,D49,R71,U7,L72" ",")))))
+  (define eg1b
+    (line->segments
+     (wire-up (posn 0 0)
+              (map parse-displacement
+                   (string-split "U62,R66,U55,R34,D71,R55,D58,R83" ",")))))
+
+  (check-equal? (apply min (map manhatten-norm (cdr (intersect-segments eg1a eg1b))))
+                159)
+
+  (define eg2a
+    (line->segments
+     (wire-up (posn 0 0)
+              (map parse-displacement
+                   (string-split "R98,U47,R26,D63,R33,U87,L62,D20,R33,U53,R51" ",")))))
+  (define eg2b
+    (line->segments
+     (wire-up (posn 0 0)
+              (map parse-displacement
+                   (string-split "U98,R91,D20,R16,D67,R40,U7,R15,U6,R7" ",")))))
+
+  
+ )
