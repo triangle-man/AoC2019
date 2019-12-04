@@ -12,6 +12,12 @@ regretting not adding helper functions earlier. Perhaps I could
 - try to be more consistent with naming from the start. Eg, I make use of
   structures for types; so for operations on types of `things`, start all
   functions with `thing-`
+- try to reach for `fold` or `for`
+
+mbutterick just converted numbers to strings when necessary! Maybe I should stop
+worrying about performance.
+
+The pattern I'm looking for may be what Haskell calls `scanl`.
 
 
 
