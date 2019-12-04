@@ -13,6 +13,8 @@ regretting not adding helper functions earlier. Perhaps I could
   structures for types; so for operations on types of `things`, start all
   functions with `thing-`
 - try to reach for `fold` or `for`
+- just don't worry about memory: stick to immutable structures, and prefer lists
+  (which support fold!)
 
 mbutterick just converted numbers to strings when necessary! Maybe I should stop
 worrying about performance.
