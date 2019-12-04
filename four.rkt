@@ -73,14 +73,15 @@
          (vector-ref p 5))
       9))
 
-;; Does a zero appear which is not next to another zero?
+
 (define (has-lone-zero? p)
-  (let loop [(zeros-so-far 0)
-             (rest         (vector->list p))]
-    (if (null? rest)
-        (eq? zeros-so-far 1) 
-        (if (zero? (car rest))
-            (loop (+ 1 zeros-so-far) (cdr rest))
-            (if (eq? zeros-so-far 1)
-                #t
-                (loop 0 (cdr rest)))))))
+  (for/fold ([zs 0]
+             #:result (eq? zs 1))
+            ([digit (in-vector p)])
+    #:break (and (eq? zs 1) (not (zero? digit)))
+    (if (zero? digit)
+        (+ zs 1)
+        0)))
+
+
+
