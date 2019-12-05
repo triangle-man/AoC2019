@@ -9,11 +9,13 @@
   (define intcode
     (list->vector (map string->number inputs)))
 
-  ;; PART I
+  ;; PART I -- input 1
+  ;; PART II -- input 5
   (define program
     (machine-init intcode 0))
   (machine-run! program)
-)
+
+  )
 
     
 (module+ test
@@ -28,6 +30,12 @@
                   (machine-run! pgm)
                   (peek pgm 4))
                 99)
+
+  (define pgm1
+    (machine-init
+     (list->vector (map string->number (string-split
+                                        "3,21,1008,21,8,20,1005,20,22,107,8,21,20,1006,20,31,1106,0,36,98,0,0,1002,21,125,20,4,20,1105,1,46,104,999,1105,1,46,1101,1000,1,20,4,20,1105,1,46,98,99"
+                                        ","))) 0))
 
   )
 
@@ -97,38 +105,21 @@
 ;; Execute one instruction in a machine
 ;; pc must not be #f on entry
 (define (machine-step! m)
-  (let ([ip     (machine-ip m)])
+  (let ([ip (machine-ip m)])
     (let-values ([(opcode p1-mode p2-mode p3-mode) (instruction-decode (peek m ip))])
       (match opcode
         ;; All instructions mutate m
-        ['halt     (halt! m)]
-        ['add      (op-execute3 m ip + p1-mode p2-mode p3-mode)]
-        ['mul      (op-execute3 m ip * p1-mode p2-mode p3-mode)]
-        ['readin   (op-input m ip p1-mode)]
-        ['writeout (op-output m ip p1-mode)]
-        [else      (raise-user-error "Unknown opcode")] 
+        ['halt          (halt! m)]
+        ['add           (op-execute3 m + p1-mode p2-mode p3-mode)]
+        ['mul           (op-execute3 m * p1-mode p2-mode p3-mode)]
+        ['readin        (op-input m p1-mode)]
+        ['writeout      (op-output m p1-mode)]
+        ['jump-if-true  (op-jump-if-true m p1-mode p2-mode)]
+        ['jump-if-false (op-jump-if-true m p1-mode p2-mode)]
+        ['less-than?    (op-less-than? m p1-mode p2-mode p3-mode)]
+        ['equals?       (op-equals? m p1-mode p2-mode p3-mode)]
+        [else           (raise-user-error "Unknown opcode")] 
         ))))
-
-;; execute3! : Opcodes with two input paramameters and an output parameter
-(define (op-execute3 m ip op p1-mode p2-mode p3-mode)
-  (let ([x (fetch m (+ ip 1) p1-mode)]
-        [y (fetch m (+ ip 2) p2-mode)])
-    (let ([result (op x y)])
-      (insert! m (+ ip 3) p3-mode result)))
-  (set-machine-ip! m (+ ip 4)))
-
-(define (op-input m ip p1-mode)
-  (print-ip ip)
-  (insert! m (+ ip 1) p1-mode (read))
-  (set-machine-ip! m (+ ip 2)))
-
-(define (op-output m ip p1-mode)
-  (print-ip ip)
-  (printf "~a\n" (fetch m (+ ip 1) p1-mode))
-  (set-machine-ip! m (+ ip 2)))
-
-(define (print-ip ip)
-  (printf "[~a] " (~a ip #:min-width 3 #:align 'right)))
 
 ;; Decoding instructions
 ;; instruction -> (values opcode p1-mode p2-mode p3-mode)
@@ -144,6 +135,10 @@
     [2 'mul]
     [3 'readin]
     [4 'writeout]
+    [5 'jump-if-true]
+    [6 'jump-if-false]
+    [7 'less-than?]
+    [8 'equals?]
     [99 'halt]
     ))
 
@@ -151,3 +146,55 @@
   (match md
     [0 'position]
     [1 'immediate]))
+
+;; execute3! : Opcodes with two input paramameters and an output parameter
+(define (op-execute3 m op p1-mode p2-mode p3-mode)
+  (let ([ip (machine-ip m)])
+   (let ([x (fetch m (+ ip 1) p1-mode)]
+         [y (fetch m (+ ip 2) p2-mode)])
+     (let ([result (op x y)])
+       (insert! m (+ ip 3) p3-mode result)))
+   (set-machine-ip! m (+ ip 4))))
+
+(define (op-input m p1-mode)
+  (let ([ip (machine-ip m)])
+    (print-ip ip)
+    (insert! m (+ ip 1) p1-mode (read))
+    (set-machine-ip! m (+ ip 2))))
+
+(define (op-output m p1-mode)
+  (let ([ip (machine-ip m)])
+    (print-ip ip)
+    (printf "~a\n" (fetch m (+ ip 1) p1-mode))
+    (set-machine-ip! m (+ ip 2))))
+
+(define (print-ip ip)
+  (printf "[~a] " (~a ip #:min-width 3 #:align 'right)))
+
+(define (op-jump-if-true m p1-mode p2-mode)
+  (let ([ip (machine-ip m)])
+    (if (not (zero? (fetch m (+ ip 1) p1-mode)))
+        (set-machine-ip! m (fetch m (+ ip 2) p2-mode))
+        (set-machine-ip! m (+ ip 3)))))
+
+(define (op-jump-if-false m p1-mode p2-mode)
+  (let ([ip (machine-ip m)])
+    (when (zero? (fetch m (+ ip 1) p1-mode))
+      (set-machine-ip! m (fetch m (+ ip 2) p2-mode))
+      (set-machine-ip! m (+ ip 3)))))
+
+(define (op-less-than? m p1-mode p2-mode p3-mode)
+  (let ([ip (machine-ip m)])
+    (if (< (fetch m (+ ip 1) p1-mode)
+           (fetch m (+ ip 2) p2-mode))
+        (insert! m (+ ip 3) p3-mode 1)
+        (insert! m (+ ip 3) p3-mode 0))
+    (set-machine-ip! m (+ ip 4))))
+
+(define (op-equals? m p1-mode p2-mode p3-mode)
+  (let ([ip (machine-ip m)])
+    (if (= (fetch m (+ ip 1) p1-mode)
+           (fetch m (+ ip 2) p2-mode))
+        (insert! m (+ ip 3) p3-mode 1)
+        (insert! m (+ ip 3) p3-mode 0))
+    (set-machine-ip! m (+ ip 4))))
