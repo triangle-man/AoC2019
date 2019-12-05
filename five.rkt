@@ -118,13 +118,17 @@
   (set-machine-ip! m (+ ip 4)))
 
 (define (op-input m ip p1-mode)
+  (print-ip ip)
   (insert! m (+ ip 1) p1-mode (read))
   (set-machine-ip! m (+ ip 2)))
 
 (define (op-output m ip p1-mode)
-  (printf "[~a] ~a\n" ip (fetch m (+ ip 1) p1-mode))
+  (print-ip ip)
+  (printf "~a\n" (fetch m (+ ip 1) p1-mode))
   (set-machine-ip! m (+ ip 2)))
 
+(define (print-ip ip)
+  (printf "[~a] " (~a ip #:min-width 3 #:align 'right)))
 
 ;; Decoding instructions
 ;; instruction -> (values opcode p1-mode p2-mode p3-mode)
