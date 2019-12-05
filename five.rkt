@@ -2,7 +2,6 @@
 
 ;; TODO
 ;; - Add stdin, stdout, stderr to machine
-;; - Write op- generator
 ;; - Decompiler
 
 
@@ -60,40 +59,49 @@
   (machine (vector-copy v) ic))
 
 ;; halted? : machine? -> boolean?
-(define (halted? m)
-  (not (machine-ip m)))
+(define (halted? M)
+  (not (machine-ip M)))
 
-;; halt! : machine? -> machine?
+;; halt! : machine? -> void?
 ;; Stop the machine
-(define (halt! m)
-  (set-machine-ip! m #f))
+(define (halt! M)
+  (set-machine-ip! M #f))
+
+;; jump! : machine? addr -> void?
+;; Set ip to new address
+(define (jump! M addr)
+  (set-machine-ip! M addr))
+
+;; skip! : jump relative to instruction pointer
+(define (skip! M rel-addr)
+  (jump! M (+ rel-addr (machine-ip M))))
 
 ;; peek : machine? integer? -> integer?
 ;; Read and write the memory at position addr
-(define (peek m addr)
-  (vector-ref (machine-memory m) addr))
+(define (peek M addr)
+  (vector-ref (machine-memory M) addr))
 
 ;; poke! : machine? integer? integer? -> void?
-(define (poke! m addr val)
-  (vector-set! (machine-memory m) addr val))
+(define (poke! M addr val)
+  (vector-set! (machine-memory M) addr val))
 
 ;; Read or write the memory at the position stored in the position addr
-(define (mem-read m addr)
-  (peek m (peek m addr)))
+(define (mem-read M addr)
+  (peek M (peek M addr)))
 
-(define (mem-write! m addr val)
-  (poke! m (peek m addr) val))
+(define (mem-write! M addr val)
+  (poke! M (peek M addr) val))
 
 ;; Read and write the memory in the mode given
-(define (fetch m addr mode)
-  (match mode
-    ['position (mem-read m addr)]
-    ['immediate (peek m addr)]))
+(define (fetch M addr μ)
+  (match μ
+    ['position (mem-read M addr)]
+    ['immediate (peek M addr)]))
 
-(define (insert! m addr mode val)
-  (match mode
-    ['position (mem-write! m addr val)]
-    ['immediate (poke! m addr val)]))
+(define (insert! M addr μ val)
+  (match μ
+    ['position (mem-write! M addr val)]
+    ['immediate (poke! M addr val)]))
 
 
 ;; ------------------------------------------------------------
@@ -101,29 +109,29 @@
 
 ;; machine-run : machine? -> void?
 ;; Run machine until it halts
-(define (machine-run! m)
+(define (machine-run! M)
   (let loop ()
-    (when (not (halted? m))
-      (machine-step! m)
+    (when (not (halted? M))
+      (machine-step! M)
       (loop))))
 
 ;; machine-step : machine? -> void?
 ;; Execute one instruction in a machine
 ;; pc must not be #f on entry
-(define (machine-step! m)
-  (let ([ip (machine-ip m)])
-    (let-values ([(opcode p1-mode p2-mode p3-mode) (instruction-decode (peek m ip))])
+(define (machine-step! M)
+  (let ([ip (machine-ip M)])
+    (let-values ([(opcode p1-mode p2-mode p3-mode) (instruction-decode (peek M ip))])
       (match opcode
-        ;; All instructions mutate m
-        ['halt          (halt! m)]
-        ['add           (op-execute3 m + p1-mode p2-mode p3-mode)]
-        ['mul           (op-execute3 m * p1-mode p2-mode p3-mode)]
-        ['readin        (op-input m p1-mode)]
-        ['writeout      (op-output m p1-mode)]
-        ['jump-if-true  (op-jump-if-true m p1-mode p2-mode)]
-        ['jump-if-false (op-jump-if-false m p1-mode p2-mode)]
-        ['less-than?    (op-less-than? m p1-mode p2-mode p3-mode)]
-        ['equals?       (op-equals? m p1-mode p2-mode p3-mode)]
+        ;; All instructions mutate M
+        ['halt          (halt! M)]
+        ['add           (op-add M p1-mode p2-mode p3-mode)]
+        ['mul           (op-mul M p1-mode p2-mode p3-mode)]
+        ['readin        (op-readin M p1-mode)]
+        ['writeout      (op-writeout M p1-mode)]
+        ['jump-if-true  (op-jump-if-true M p1-mode p2-mode)]
+        ['jump-if-false (op-jump-if-false M p1-mode p2-mode)]
+        ['less-than?    (op<? M p1-mode p2-mode p3-mode)]
+        ['equals?       (op=? M p1-mode p2-mode p3-mode)]
         [else           (raise-user-error "Unknown opcode")] 
         ))))
 
@@ -131,7 +139,7 @@
 ;; instruction -> (values opcode p1-mode p2-mode p3-mode)
 (define (instruction-decode in)
   (let*-values ([(mode  opcode) (quotient/remainder in 100)]
-                [(mode~ p1)    (quotient/remainder mode 10)]
+                [(mode~ p1)     (quotient/remainder mode 10)]
                 [(p3 p2)        (quotient/remainder mode~ 10)])
     (values (code-sym opcode) (mode-sym p1) (mode-sym p2) (mode-sym p3))))
 
@@ -153,54 +161,84 @@
     [0 'position]
     [1 'immediate]))
 
-;; execute3! : Opcodes with two input paramameters and an output parameter
-(define (op-execute3 m op p1-mode p2-mode p3-mode)
-  (let ([ip (machine-ip m)])
-   (let ([x (fetch m (+ ip 1) p1-mode)]
-         [y (fetch m (+ ip 2) p2-mode)])
-     (let ([result (op x y)])
-       (insert! m (+ ip 3) p3-mode result)))
-   (set-machine-ip! m (+ ip 4))))
+;; ------------------------------------------------------------
+;; Opcodes
 
-(define (op-input m p1-mode)
-  (let ([ip (machine-ip m)])
-    (print-ip ip)
-    (insert! m (+ ip 1) p1-mode (read))
-    (set-machine-ip! m (+ ip 2))))
+;; make-op/3 : Make three-parameter opcodes
+;; op : (number? number? -> number?)
+(define (make-op/3 op)
+  (λ (M μ₁ μ₂ μ₃)
+    (let ([ip (machine-ip M)])
+      (let ([π₁ (fetch M (+ ip 1) μ₁)]
+            [π₂ (fetch M (+ ip 2) μ₂)])
+        (let ([result (op π₁ π₂)])
+          (insert! M (+ ip 3) μ₃ result)))
+      (skip! M 4))))
 
-(define (op-output m p1-mode)
-  (let ([ip (machine-ip m)])
-    (print-ip ip)
-    (printf "~a\n" (fetch m (+ ip 1) p1-mode))
-    (set-machine-ip! m (+ ip 2))))
+;; make-op/test-and-jump : Make two-parameter opcodes
+;; op : (number? -> boolean?)
+(define (make-op/test-and-jump op)
+  (λ (M μ₁ μ₂)
+    (let ([ip (machine-ip M)])
+      (let ([π₁   (fetch M (+ ip 1) μ₁)]
+            [addr (fetch M (+ ip 2) μ₂)])
+        (if (op π₁)
+            (jump! M addr)
+            (skip! M 3))))))
+
+;; make-op/peek : Make opcodes that send signals
+;; writer : number? -> void?
+(define (make-op/peek writer)
+  (λ (M μ₁)
+    (let ([ip (machine-ip M)])
+      (writer (fetch M (+ ip 1) μ₁))
+      (skip! M 2))))
+
+;; make-op/poke : Opcodes that receive signals
+;; reader : -> number?
+(define (make-op/poke reader)
+  (λ (M μ₁)
+    (let ([ip (machine-ip M)])
+      (insert! M (+ ip 1) μ₁ (reader))
+      (skip! M 2))))
+
+(define op-add
+  (make-op/3
+   (λ (π₁ π₂)
+     (+ π₁ π₂))))
+
+(define op-mul
+  (make-op/3
+   (λ (π₁ π₂)
+     (* π₁ π₂))))
+
+(define op<?
+  (make-op/3
+   (λ (π₁ π₂)
+     (if (< π₁ π₂) 1 0))))
+
+(define op=?
+  (make-op/3
+   (λ (π₁ π₂)
+     (if (= π₁ π₂) 1 0))))
+
+(define op-jump-if-true
+  (make-op/test-and-jump
+   (compose not zero?)))
+
+(define op-jump-if-false
+  (make-op/test-and-jump
+   zero?))
+
+(define op-readin
+  (make-op/poke
+   (λ () (read))))
+
+(define op-writeout
+  (make-op/peek
+   (λ (v) (println v))))
 
 (define (print-ip ip)
   (printf "[~a] " (~a ip #:min-width 3 #:align 'right)))
 
-(define (op-jump-if-true m p1-mode p2-mode)
-  (let ([ip (machine-ip m)])
-    (if (not (zero? (fetch m (+ ip 1) p1-mode)))
-        (set-machine-ip! m (fetch m (+ ip 2) p2-mode))
-        (set-machine-ip! m (+ ip 3)))))
 
-(define (op-jump-if-false m p1-mode p2-mode)
-  (let ([ip (machine-ip m)])
-    (if (zero? (fetch m (+ ip 1) p1-mode))
-      (set-machine-ip! m (fetch m (+ ip 2) p2-mode))
-      (set-machine-ip! m (+ ip 3)))))
-
-(define (op-less-than? m p1-mode p2-mode p3-mode)
-  (let ([ip (machine-ip m)])
-    (if (< (fetch m (+ ip 1) p1-mode)
-           (fetch m (+ ip 2) p2-mode))
-        (insert! m (+ ip 3) p3-mode 1)
-        (insert! m (+ ip 3) p3-mode 0))
-    (set-machine-ip! m (+ ip 4))))
-
-(define (op-equals? m p1-mode p2-mode p3-mode)
-  (let ([ip (machine-ip m)])
-    (if (= (fetch m (+ ip 1) p1-mode)
-           (fetch m (+ ip 2) p2-mode))
-        (insert! m (+ ip 3) p3-mode 1)
-        (insert! m (+ ip 3) p3-mode 0))
-    (set-machine-ip! m (+ ip 4))))
