@@ -1,5 +1,11 @@
 #lang racket
 
+;; TODO
+;; - Add stdin, stdout, stderr to machine
+;; - Write op- generator
+;; - Decompiler
+
+
 (module+ main
   ;; Read inputs and initialise machine
   (define inputs
@@ -115,7 +121,7 @@
         ['readin        (op-input m p1-mode)]
         ['writeout      (op-output m p1-mode)]
         ['jump-if-true  (op-jump-if-true m p1-mode p2-mode)]
-        ['jump-if-false (op-jump-if-true m p1-mode p2-mode)]
+        ['jump-if-false (op-jump-if-false m p1-mode p2-mode)]
         ['less-than?    (op-less-than? m p1-mode p2-mode p3-mode)]
         ['equals?       (op-equals? m p1-mode p2-mode p3-mode)]
         [else           (raise-user-error "Unknown opcode")] 
@@ -124,9 +130,9 @@
 ;; Decoding instructions
 ;; instruction -> (values opcode p1-mode p2-mode p3-mode)
 (define (instruction-decode in)
-  (let*-values ([(modes opcode) (quotient/remainder in 100)]
-                [(modes2 p1)    (quotient/remainder modes 10)]
-                [(p3 p2)        (quotient/remainder modes2 10)])
+  (let*-values ([(mode  opcode) (quotient/remainder in 100)]
+                [(mode~ p1)    (quotient/remainder mode 10)]
+                [(p3 p2)        (quotient/remainder mode~ 10)])
     (values (code-sym opcode) (mode-sym p1) (mode-sym p2) (mode-sym p3))))
 
 (define (code-sym op)
@@ -179,7 +185,7 @@
 
 (define (op-jump-if-false m p1-mode p2-mode)
   (let ([ip (machine-ip m)])
-    (when (zero? (fetch m (+ ip 1) p1-mode))
+    (if (zero? (fetch m (+ ip 1) p1-mode))
       (set-machine-ip! m (fetch m (+ ip 2) p2-mode))
       (set-machine-ip! m (+ ip 3)))))
 
