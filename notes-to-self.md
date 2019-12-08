@@ -25,6 +25,8 @@ stop worrying about performance.
 
 The pattern I'm looking for may be what Haskell calls `scanl`.
 
+`in-slice` is a thing. It peels of n elements of a list at a time.
+
 
 
 
