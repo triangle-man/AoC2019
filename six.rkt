@@ -14,6 +14,16 @@
 
   ;; Part I
   (println (apply + (flatten (heights orbit-map))))  
+
+  ;; Part II
+  (define path-to-santa (path-to-leaf orbit-map "SAN"))
+  (define path-to-you (path-to-leaf orbit-map "YOU"))
+  (println
+   (- (+ (length path-to-santa)
+         (length path-to-you))
+      (* 2 (length (take-common-prefix path-to-santa path-to-you)))
+      2))
+   
   
   )
 
@@ -38,6 +48,38 @@
   (check-eq?
    42
    (apply + (flatten (heights tree1))))
+
+  (define eg2
+    (tree-grow
+     '(("COM" . "B")
+       ("B" . "C")
+       ("C" . "D")
+       ("D" . "E")
+       ("E" . "F")
+       ("B" . "G")
+       ("G" . "H")
+       ("D" . "I")
+       ("E" . "J")
+       ("J" . "K")
+       ("K" . "L")
+       ("K" . "YOU")
+       ("I" . "SAN"))
+     "COM"))
+
+  (check-equal?
+   (path-to-leaf eg2 "YOU")
+   '("COM" "B" "C" "D" "E" "J" "K" "YOU"))
+
+  (define YOU-path (path-to-leaf eg2 "YOU"))
+  (define SAN-path (path-to-leaf eg2 "SAN"))
+
+  (check-equal?
+   (- (+ (length YOU-path)
+         (length SAN-path))
+      (* 2 (length (take-common-prefix YOU-path SAN-path)))
+      2)
+   4)
+  
   
   )
 
@@ -74,5 +116,14 @@
       h))
 
 ;; Find the path from the root to a given leaf
+;; path-to-leaf : tree? node? -> Maybe tree?
 (define (path-to-leaf tree node)
-  #f)
+  (if (not (pair? tree))
+      (if (equal? tree node)
+          (list node)
+          #f)
+      (let ([result (ormap (curryr path-to-leaf node) (cdr tree))])
+        (if result
+            (cons (car tree) result)
+            #f))))
+
