@@ -36,22 +36,41 @@
   (machine-put! test-comms 8)
   (machine-run! test-comms)
   (check-equal? (machine-get! test-comms) 1000)
+
+  (define test-rel1
+    (machine-init #(109 1 204 -1 1001 100 1 100 1008 100 16 101 1006 101 0 99) #:size 256))
+
+  (define test-rel2
+    (machine-init #(1102 34915192 34915192 7 4 7 99 0)))
+  (machine-run! test-rel2)
+  (check-equal? (machine-get! test-rel2) 1219070632396864)
+
+  (define test-rel3
+    (machine-init #(104 1125899906842624 99)))
+  (machine-run! test-rel3)
+  (check-equal? (machine-get! test-rel3) 1125899906842624)
   
   )
 
 ;; ------------------------------------------------------------
 ;; Machines
 
-;; A machine is a vector of integers (memory), a state, an instruction pointer, and two buffers for
-;; input and output
+;; A machine is:
+;; - a vector of integers (memory)
+;; - a state
+;; - the current relative base;
+;; - an instruction pointer; and
+;; -two buffers for input and output
 ;; Machines are mutable.
 ;; The state is one of 'run, 'halt, or 'block
-(struct machine (memory ip state stdin stdout) #:transparent #:mutable)
+(struct machine (memory ip base state stdin stdout) #:transparent #:mutable)
 
 ;; machine-init
 ;; Copies initial memory vector
-(define (machine-init v [ip 0])
-  (machine (vector-copy v) ip 'run null null))
+(define (machine-init v [ip 0] #:size [size (* 16 1024)])
+  (let* ([mem (make-vector size 0)])
+    (vector-copy! mem 0 v)
+    (machine mem ip 0 'run null null)))
 
 ;; halted? : machine? -> boolean?
 (define (halted? M)
@@ -98,16 +117,25 @@
 (define (mem-write! M addr val)
   (poke! M (peek M addr) val))
 
+;; Read or write memory at position offset by base
+(define (peek-rel M addr)
+  (peek M (+ (machine-base M) (peek M addr))))
+
+(define (poke-rel! M addr val)
+  (poke! M (+ (machine-base M) (peek M addr)) val))
+
 ;; Read and write the memory in the mode given
 (define (fetch M addr μ)
   (match μ
     ['position (mem-read M addr)]
-    ['immediate (peek M addr)]))
+    ['immediate (peek M addr)]
+    ['relative (peek-rel M addr)]))
 
 (define (insert! M addr μ val)
   (match μ
     ['position (mem-write! M addr val)]
-    ['immediate (poke! M addr val)]))
+    ['immediate (poke! M addr val)]
+    ['relative (poke-rel! M addr val)]))
 
 ;; ------------------------------------------------------------
 ;; Input and output buffers
@@ -155,6 +183,7 @@
         ['jump-if-false (op-jump-if-false M p1-mode p2-mode)]
         ['less-than?    (op<? M p1-mode p2-mode p3-mode)]
         ['equals?       (op=? M p1-mode p2-mode p3-mode)]
+        ['base-offset   (op-offset M p1-mode)]
         [else           (raise-user-error "Unknown opcode")] 
         ))))
 
@@ -176,13 +205,15 @@
     [6 'jump-if-false]
     [7 'less-than?]
     [8 'equals?]
+    [9 'base-offset]
     [99 'halt]
     ))
 
 (define (mode-sym md)
   (match md
     [0 'position]
-    [1 'immediate]))
+    [1 'immediate]
+    [2 'relative]))
 
 ;; ------------------------------------------------------------
 ;; Opcodes
@@ -272,3 +303,9 @@
 
 (define (print-ip ip)
   (printf "[~a] " (~a ip #:min-width 3 #:align 'right)))
+
+(define (op-offset M μ₁)
+  (let ([ip (machine-ip M)])
+    (set-machine-base! M (+ (machine-base M)
+                            (fetch M (+ ip 1) μ₁)))
+    (skip! M 2)))
